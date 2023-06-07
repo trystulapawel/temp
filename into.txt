@@ -1,0 +1,630 @@
+Amadeus Web Services Implementation Guide 
+  
+Light Ticketing flow 2.0
+Integration guide
+(Dec 2022)
+ 
+Index
+1	Introduction	5
+2	Prerequisites	6
+3	Light ticketing specific features and limitations	7
+3.1.1	Light ticketing limitations	7
+3.1.2	Light ticketing specific features	9
+4	Flow diagram	11
+Light Ticketing minimum standard solution - excluding Ryanair(FR).	12
+Light Ticketing minimum standard solution with 1st extra baggage (xbag)	15
+Light Ticketing minimum standard solution with seat selection service - Mandatory solution for Ryanair(FR)	18
+Generic Light Ticketing post issuance check to apply to any booking flow.	20
+5	WS Certification	22
+Certification Test Case	22
+Certification checklist	23
+Error Handling	26
+6	FAQ - Frequently Asked Questions	27
+6.1.1	Master Pricer (MP): How to differentiate the LTC recommendations from the FSC ones?	27
+6.1.2	Language supported by LTCs	27
+6.1.3	Open Jaw Recommendations:	28
+6.1.4	Connections	28
+6.1.5	Disabling Booking Confirmation Email	28
+6.1.6	Displaying TST and TSM after Booking / Ticketing	29
+6.1.7	The LTC content activation will reduce the number of FSC recommendations returned in the shopping replies	29
+7	XML Samples	30
+7.1.1	Shopping	30
+7.1.2	Flight Booking	31
+7.1.3	PNR Construction	31
+7.1.4	Itinerary pricing	31
+7.1.5	Chargeable Services - Booking/Pricing/TSM creation	31
+7.1.6	Chargeable Services - Pricing	32
+7.1.7	Ticket Issuance	32
+7.1.8	Seat Selection	32
+7.1.9	Seat Request Pricing	32
+7.1.10	Open Jaw - Shopping	34
+7.1.11	Open Jaw - Flight Booking	34
+7.1.12	Open Jaw - PNR Construction	34
+7.1.13	Open Jaw - Itinerary Pricing	34
+7.1.14	Open Jaw - Ticket Issuance	35
+7.1.15	Return trip for two ADT	36
+7.1.16	One-way trip for two ADT with XBAG	36
+7.1.17	Return trip for tree ADT with XBAG	36
+7.1.18	One-way trip for one ADT (CORPO)	36
+7.1.19	Eurowings (EU) flow	36
+         
+1 Introduction
+This document details how to implement the Light Ticketing Carriers (LTC) webservices (WS) flow solution for Light Ticketing Carriers (LTC).
+ 
+At the very beginning let's agree with the terms.
+A Low-Cost Carrier (LCC) is a carrier that is having a business model "price oriented" (no free included services) and does not necessarily follow the IATA rules. 
+A light Ticketing Carrier (LTC) is a LCC that is distributed by the Amadeus system via the Light Ticketing product.
+Please note, the same carrier can be identified as a LCC and LTC (i.e. Transavia). 
+However not necessarily all LCCs are distributed via LTC (i.e. Vueling).
+  
+Here is the list of LTCs supported by Amadeus (for any other LTC please contact the Amadeus LTC Product Managers):
+* easyJet (U2)
+* Eurowings (EW)
+* Jet2 (LS)
+* Transavia Airlines (HV), Transavia France (TO) and Transavia Denmark (PH)
+* Ryanair(FR) 
+  
+2 Prerequisites
+To start using Light Ticketing flow, the implementation consultant needs to ensure that the following setting procedure has been properly applied by the customer account manager or the project manager link  (MEMO - Light Ticketing Activation and Office Profile settings.doc)
+ 
+In case you are not able to access the document pointed by this above link, it means that you might not be entitled to access those internal settings and refer to your Amadeus local representative.
+Warning: as soon as those Office ID LT settings are done, the Light Ticketing Carrier (LTC) content will start to be returned in the WebServices (WS) shopping replies (MasterPricer(MP) and other similar shopping products).
+This can be an issue if the customer booking engine is already running some Full Service Carrier (FSC) business (with the same office id) and is not ready yet to support the LTC business.
+In such case, as preliminary action to the LTC office settings, it is highly recommended to add the "XLC" value in the MP request, to prevent the LTC content in the MP replies, until the customer application is ready to handle the LTC content (XLC for eXclude Low Costs).
+This can also be a dynamic mean for the customer application administrator to switch ON or OFF the LTC content from the MP replies.
+<Fare_MasterPricerTravelBoardSearch>
+...
+  <fareOptions>
+    <pricingTickInfo>
+      <pricingTicketing>
+        <priceType>XLC</priceType>  ==> to exclude the LTCs recommendations for the reply
+      </pricingTicketing>
+    </pricingTickInfo>
+  </fareOptions>
+...
+</Fare_MasterPricerTravelBoardSearch>
+  
+3 Light ticketing specific features and limitations
+To keep the management of the LTC business as smooth as possible, Amadeus is doing its best to integrate the Light Ticketing Carrier (LTC) process within the Full Service Carrier (FSC) one.
+But there are still some LTC differences that are mainly due to the LTCs specific behaviours.
+As most of the below restrictions or differences are depending on the LTCs behaviour, it's quite difficult to indicate until when they will exist.
+So if the current project scope is hitting one of the limitations please refers to the Amadeus LTC Product Manager for possible work arounds or coming solutions.
+ 
+Please find below a file summarising the features available per LTCs:
+   
+3.1.1 Light ticketing limitations
+* No PNR FSC/LTC Mix: mixing Full-Service Carrier (FSC) and Light Ticketing Carrier (LTC) bookings inside the same PNR is not supported yet (delivery on going no delivery date defined yet, for more details please contact your account manager).
+* No PNR LTC Mix: mixing different LTC bookings inside the same PNR is not supported yet (delivery on going no delivery date defined yet, for more details please contact your account manager).
+e.g: The below PNR itinerary combination is not possible: 
+      segment 1 with EasyJet (U2) 
+      segment 2 with Transavia (HV)
+* No fare class mixing
+Some LTC (e.g: U2) business rules do not allow mixing 2 different fare classes in the same PNR, for different flights.
+Eg: 
+      segment 1 with EasyJet (U2), booking class W
+      segment 2 with easyJet (U2), booking class B
+The best way to avoid this issue would be to make travel agents aware that mixing of fare classes, in the same PNR, is not supported for some LTCs and the most secure assumption is to expand this restriction to all LTCs. Separate PNRs need to be created in case of different fare classes.
+* Passenger types supported:
+- The CHD passenger type not supported by Master Price (shopping time)
+- Then for the remaining part of the booking process (booking, pricing and ticketing) all the passenger types (ADT, CHD, INF) are supported (for more detail please refer to the "LTC_features" imbedded file).
+ 
+* No specific pricing option possible: the PNR pricing is done in a global manner (a unique Form Of Payment per PNR is allowed and it's used to price all the itinerary for all the passengers).
+Most of the pricing options will be ignored: some pricing options like currency override are supported for some carriers.
+And the pricing will be built with the PNR data (LTC name, booking class, passenger type and corporate codes if any).
+* If several corporate codes are sent in the pricing query, only the first one will be considered and used to compute the fare. It will be sent to all the LTCs involved in the shopping/pricing request. Only the owner LTC will consider it. 
+This means that there is a naming convention to avoid having the same corporate code name across different LTCs.
+* no partial pricing nor partial issuance supported
+The PNR has to be priced and issued in globality (no FOP segment/passenger association in the PNR_Reply).
+* The ticketing sales reports is available for LTCs.
+No global display possible like for the FSCs. The Sales report display requests, for LTCs, have to be done by LTC and by currency.
+It means that the global sales report content picture can be built by sending several display transactions (one per LTC and currency).
+This is not really convenient but it's the only possible solution for the time being.
+* Possibility to get some cross LTC ticket overlaps
+As opposed to FSC world (*), it can happen that some duplicate ticket numbers are used across different LTCs (e.g: it can happen that a U2 and Jet2 are getting the same ticket numbers). Some LTC/FSC ticket number overlap is also possible.
+This point could be an issue in case the customer has some back office activity, based on the ticketing sales report where the ticket unicity concept is important.
+(*) in the FSC world the IATA organization guarantee the unicity of the ticket numbers across all the FSC carriers.
+(IATA - International Air Transport Association)
+* No possibility to display neither the e-Ticket nor EMD (Electronic Miscellaneous Document associated to the ancillary service).
+This because there is no ticket concept in the LTC world.
+Any attempts to display such element will end up with the below error message:
+ "DOCUMENT NUMBER NOT ELECTRONIC". 
+* Certain LTC like U2 have a restricted distribution policy for online agents. It is advised that online agents, wanting to access the content of these carriers should contact them (or their Amadeus account managers) in order to confirm that they have the right to access them.
+* Estimated FOP fees in Master Travel Board Search is only available at this time for Full-Service Carriers. This feature provides a credit/debit card fee evaluation for each recommendation returned.
+ 
+3.1.2 Light ticketing specific features
+* When searching Light Ticketing fares within MasterPricer, MasterPricer's logic is to provide the lowest possible fare. Should your application require a different class or a range of class availability, Agent Fare Families (AFF) should be incorporated into the MasterPricer search. To use Agent Fare Families (AFF), MasterPricer's data profile "MY SEARCH" need to be activated.
+* Some LTC are applying Credit card fees (please refer to the "LC_features_by_LTCs" imbedded file).
+So the credit card details are required at pricing time to calculates the Credit card fees.
+A service fee element (called SVC) will be added in the Passenger Name Record (PNR) and its associated pricing record (called TSM) will be also be created at the pricing time.
+Even if the FOP is not chargeable (e.g: Debit Card), a TSM will be anyway created with a total amount of 0 (zero).
+* Ticketing combined issuance: as consequence of the above point, the ticketing step is always issuing simultaneously the Transitional Store Ticket (TST) and the Transitional Store Miscellaneous (TSM) record. This means that the usage of the <DocIssuance_IssueCombined> service is mandatory.
+* Ticketing, instant issuance: the bookings are confirmed only at ticketing time.
+It's only at the ticketing time that Amadeus is contacting the LTC to create an equivalent booking on its side.
+This means that there is no possibility to secure the booking, by getting a booking confirmation from any LTC, before the issuance step itself (filling the PNR does not trigger anything on the LTC side).
+So it is mandatory to issue the ticket with no delay after the booking.
+* The end user email is mandatory in the PNR to enable the LTC to send its mail booking confirmation to the customer (the ticketing step will be rejected if this element is missing).
+It's possible to request the confirmation email from LTC in a specific language (the default one is defined in the office profile LPR field).
+This can be done by creating a PNR remark category Z and the cryptic command format is:
+RMZ/CONF*LANG:XX   where XX is the language code.
+More details in the following roll outs: 
+  
+* The Credit Card Holder Name is mandatory in the FOP(*)  for all Light Ticketing Carriers except easyJet (the document issuance combine step will be rejected if this element is missing). In the case of Eurowings, after creating the TST, we need to re-add the Credit Card, re price the PNR with Booking Class, and create again the TST. 
+(*) accorfing the LTC the CVV code is also mandatory (please refer to the LT_features_by_LTCs imbedded file.
+* For the Amadeus internal resources (employees) the following document gives some additional information on the LTCs specific features and internal settings:
+Details per LT carriers
+ 
+* Introduction of Payment Fee by Transavia. The carrier has introduced additional fees per segment.
+* The Informative Best Pricing (IBP) is supported. In other words, the <Fare_InformativeBestPricingWithoutPNR> service is supported in the LTC world. Please note that Informative Best Pricing will need arrival date to work properly.
+* The pricing logic of Light Ticketing product has been changed to create one TST per passenger (no impact on TSMs creation for services. Light Ticketing Carriers will gradually benefit from this enhancement starting with Transavia (HV &TO) and Eurowings (EW) carriers.
+It sometimes used to lead to issues, such as rounding-off of the fare amounts, as all passengers belonging to the same passenger type do not share the same fare values. In order to address this specificity, the pricing logic of Light Ticketing product has been changed to create one TST per passenger (no impact on TSMs creation for services) (please refer to the "LT_features_by_LTCs" imbedded file).
+ 
+* Light Ticket Carrier may support multiple languages. Please see FAQ section for additional information.
+ 
+* Fare rules: the web service Fare_TLAGetFareRules can be used to display the fare rules.
+This service can be used in a stateless mode.
+More details in the attached fast implementation document (WS self-implementation procedure, to include this single service, within an already certified LTC booking application).
+ 
+* Amadeus Ticket Changer (ATC) and Refund feature not yet available.
+To process such action the end users must call the LTC call centres.
+ 
+* SSR EPAY payment mode: this payment method is not part of the LT products.
+   
+4 Flow diagram
+The Light ticketing carriers (LTCs) are not following the standards imposed by the IATA organisation (as it's the case for the Full Service Carriers).
+So it's quite difficult to define a standard WS solution to cover the LTC business for all the existing LTCs.
+But this is still possible in case of a reduced project scope.
+So the idea is to expose some standard WS implementation models, limited to a precise project scope, that can fit any LTC.
+In the below, there will be 2 WS flows covering the minimum specification scopes:
+* Light Ticketing minimum standard solution - basic LTC flow without any ancillary service,
+* Light Ticketing minimum standard solution with 1st extra baggage (xbag) booking - extended Light Ticketing flow with possibility of booking ancillary services limited to the first extra baggage only. 
+It can fit some other Amadeus Ancillary Services (AAAs), after some preliminary Amadeus Product manager validations.
+Then those 2 flows can be used as a base line solution and some consulting activity might be needed to propose the most appropriate solution to the project additional specifications.
+   
+Light Ticketing minimum standard solution - excluding Ryanair(FR).
+This solution is describing the minimum scope solution that can support any LTC 
+(in Agile methodology we talk about the Minimum Viable Product).
+ 
+Warning: please be aware that this solution is not compliant with the Ryanair(FR) airline because it's missing the seat selection part (Ryanair impose a seat selection for some of their booking classes).
+Ryanair(FR) is part of the carriers you plan to book then ignore this solution and refer to the one below(*) mentioning the seat selection.
+(*) chapter "Light Ticketing minimum standard solution with seat selection service - Mandatory solution for Ryanair(FR)"
+ 
+Specimen Credit Card (CC) numbers for CC fees computation warning:
+Since the shopping reply (e.g: Master Pricer) does not return the selling solutions with the credit card fees included, the booking engine might need to compute them by using the 
+ <Fare_InformativePricingWithoutPNR>with a specimen CC number.
+Careful: to be done only with the selling solution chosen by the traveller, not on all the Master Pricer recommendations (this would generate a far too big overhead).
+Amadeus can provide some specimen credit card numbers, accepted by the various LTCs, for the development and testing phases. Please refer to the LT_Features_by_LTCs imbedded file.
+When the application goes to production, those specimen CC numbers will be off to the application administrator choice and responsibility. This in order to ensure the full management control on those CC numbers (e.g: expiry date).  
+  
+Note: this above flow applies to all Light Ticketing except Eurowings that is a hybrid carrier
+  
+Hybrid carrier (Eurowings) booking flow:
+  
+Eurowings (EW) is a hybrid carrier and if price as a Light Ticketing Carrier (<priceType>L</priceType>),  then additional steps will need to done in order to properly price and to avoid errors such as NEED FORM OF PAYMENT  or INVALID FORM OF PAYMENT later in the processing. The above diagram reflects the additional or updates steps that need to be followed and an example of the web services scripts is provided in Section 8.2.6.
+If the EW sell is FSC one, then those preliminary Fare_PricePNRWithBookingClass + Ticket_CreateTSTFromPricing transaction are useless. In such (FSC) case the actual Fare_PricePNRWithBookingClass has to contain the FTO (Full Ticketing Option) input parameter to ensure that the computed price id is FSC one.
+ 
+      <attributeDetails>
+          <attributeType>FTO</attributeType>
+      </attributeDetails>
+Please find examples of both informative and PNR pricing for hybrid carrier (EW) below.
+  
+Light Ticketing minimum standard solution with 1st extra baggage (xbag)
+ 
+The below flow describes the same LTC booking solution as above, with the addition of an Amadeus Airline Ancillary Service booking (AAAs). 
+Warning limitation:
+There are a lot of ancillary services available, and the below flow is guaranteed for the first extra baggage booking only.
+For any other service, this solution is supposed to work but please refer to the ancillary services booking implementation guide (if it covers the targeted ancillary service to sell).
+The main idea, driving this LTC implementation guide is to provide a standard solution that can be applied to any carrier.
+But the AAAs are outside a global LTC standard solution. 
+A reference to the AAAs is anyway mentioned to make the link with the AAAs implementation guides more easy.
+ 
+For info this below flow solution does not work for the seat selection (described in the subsequent chapter).
+So if required by the booking application specifications, please refer to the appropriate AAAs implementation guide.
+ 
+Again, if the ancillary service to sell is different from the 1st extra baggage and the selected seat, then it is highly advise to preliminary validate the AAAs selling process with the AAAs Product Managers.
+  
+Figure - 3
+  
+Amadeus Ancillary Services (AAAs) are booked the <Service_BookPriceProduct>service.
+This service books, prices and creates the TSM record related to the ancillary service sold.
+As consequence a PNR Special Service Request (SSR) segments is created to notify the existence of an ancillary service booked.
+Please use the <Service_BookPriceProduct> version 1.0   (the 1.1 is not fully validated yet).
+ 
+The booking of ancillary services can be done only once the PNR has been created, priced and the associated pricing document (called TST) has been created 
+(the TST is a contextual element needed for the ancillary service creation).
+ 
+In case the PNR Form of payment is a credit card (CC) and the involved LTC is applying some CC fees (like U2), then the global CC fees amount are applied on the ticket price and on the AAAs price.
+In such case it is recommended to re-compute the global CC fees and recreate the TSM record by using <Service_IntegratedPrincing> and <Ticket_CreateTSMFromPricing>.
+This will ensure an accurate CC fee pricing in such situation (PNR containing a CC FOP and AAAs + LTC applying CC fees).
+   
+AAAs: Amadeus Ancillary Services
+AAAs actions
+Service to use 
+AAAs involved
+Standalone Catalogue 
+Service_StandaloneCatalogue (minimum version 13.3)
+To be used optionally, before booking construction, to get the ancillary services available with the recommendation selected by the end user: the catalogue contents will depend on the request parameters (itinerary, passenger type, ...).
+All
+Integrated Catalogue
+Service_IntegratedCatalogue (minimum version 13.3)
+To be used with a PNR online, to get the ancillary services list available with the current itinerary present in the PNR: the catalogue content will depend on the online PNR characteristics (itinerary, passenger type, ...).
+All
+Booking, pricing and TSM record creation
+Service_BookPriceProduct version 1.0 
+(not the 1.1 that is not finalized yet)
+This service:
+* creates the PNR SSR by taking the needed data from the context built by one of the above catalogue transactions.
+* Price the service
+* Creates the TSM record
+* This service replaces the usage of the Service_IntegratedPricing+Ticket_CreateTSMFromPricing services.
+All except seat selection.
+ 
+Guaranteed for the extrabag (xbag) booking.
+If any other service than xbag and Seat selection, then a validation from AAAs Product managers is required.
+Booking, pricing and TSM record creation
+Service_IntegratedPricing
+To compute all the services prices that could apply to the current PNR online.
+Ticket_CreateTSMFromPricing 
+To create the TSM record containing the ancillary services price data computed by the Service_IntegratedPricing service.
+Seat selection only
+Issuance
+DocIssuance_IssueCombined
+This service is used to issue both TST(s) and the TSM(s).
+All
+    
+Light Ticketing minimum standard solution with seat selection service - Mandatory solution for Ryanair(FR)
+ 
+Some of the Light Ticketing carrier such as easyJet support seat selection functionality. 
+ 
+Warning: Ryanair(Fr) has decided that any B (Bundle) and W (EcoFlex) fare classes booking will have to integrate a seat selection. If missing the issuance is rejected with a "FR: SPECIFY SEATS" error.
+ 
+In order to perform seat selection, the application will need to first display the seat map by using the web service <Air_RetrieveSeatMap>. 
+In order to display the prices included within the <Air_RetrieveSeatmapReply>, the "FT" indicator must be present in the soap request.
+<seatRequestParameters>
+     <processingIndicator>FT</processingIndicator>
+</seatRequestParameters>
+However, note that for certain Light Ticketing carrier, the seat map with price is only available in specific booking class.
+In addition, to avoid a possible higher price between the seat map with prices call and the ancillary seat pricing step, the map should only be called after the booking class have been determined.
+Once the seat is selected, the seat request needs to be added to the PNR with the use of <PNR_AddMultiElements> (to add an associated Segment Sell Request (SSR) element in the PNR).
+The seat selection ancillary service then needs to be priced with <Service_IntegratedPricing> and this price has to be stored inside a pricing document attached to the PNR (TSM document). 
+This TSM must be created using the context of the pricing result with the <Ticket_CreateTSMFromPricing> service.
+ 
+Remark: even though the seat selection is free, a TSM document has still to be generated 
+              (it will contain a zero amount service fee). 
+               So the calls to the <Service_IntegratedPricing> and the 
+              <Ticket_CreateTSMFromPricing> services are still needed.
+Please find below a booking flow including this seat selection ancillary service.
+     
+Generic Light Ticketing post issuance check to apply to any booking flow.
+ 
+Please be aware that getting a positive reply to the <DocIssuance_IssueCombined> request, only means that all the ticketing validating conditions have been validated and the actual ticketing action will start now in background.
+If the ticketing background process ends successfully, the PNR will be updated by the 1A system with the ticket number(s) (stored in the PNR FA element(s)).
+ 
+And during the ticketing background process includes 2 internal transactions exchanged between 1A and the LTC:
+* Pricing confirmation: 1A requests a pricing confirmation to the LTC.
+In case the LTC does not match the original pricing, the ticket issuance is aborted.
+* LTC booking confirmation: 1A sends a booking confirmation demand to the LTC.
+It's at this time that the booking confirmation occurs, as the LTC creates the PNR on its side (the LTC inventory is updated a this time).
+In case of time out during this booking confirmation (sent by Amadeus to the LTC system) Amadeus(1A) updates the PNR with some fake ticket numbers stored in the PNR FN lines (the PNR is then put in pending mode)..
+In this particular mode, the PNR cannot be updated because Amadeus does not know the actual PNR status on the LTC side (confirmed or not). 
+The only possible action is to retry a ticket issuance as described below.
+When the PNR creation is successful on the LTC side, the LTC returns its PNR record locator to 1A and this LTC PNR record locator is also stored in the 1A PNR (visible in the <PNR_Reply> response)
+ 
+Note: this flow can also be applied in case of issuance in pending mode. In such case the PNR will contain FN elements instead of FA elements.
+     
+Please pay attention that the <DocIssuance_IssueCombined> service call, mentioned above, is actually the last <DocIssuance_IssueCombined> service call, mentioned in the bottom right corner, of all the booking flows described in this document above part.
+This service call here, is for explanation purpose and it can only be seen as a "continuity description flow link" with any booking flow described in this document above part.
+     
+5 WS Certification 
+Certification Test Case
+Steps
+Scenario
+1
+Execute MasterPricer query with ADT and verify that valid recommendations are received.
+2
+Send informative query to get pricing details prior to end-user confirmation.
+3
+Display catalogue of AAAS without PNR (if AAAs are part of the specifications).
+4
+Sell chosen recommendation.
+5
+Complete the PNR construction (Passenger names, TK OK, AP, FOP, ...) and ensure that the Email contact is present.
+6
+Price itinerary
+7
+Create TST.
+8
+Display catalogue of AAAS (if AAAs are part of the specifications)
+9
+Add XBAG (if AAAs are part of the specifications)
+10
+Price services and create TSM. (if AAAs are part of the specifications)
+11
+End & Retrieve by RecLoc PNR and add email.
+12
+Issue combined ticket.
+13
+Retrieve the PNR to ensure that the expected FA elements are present
+14
+Execute MasterPricer query with 2 PAX (ADT and INF) and verify that valid recommendations are received.
+15
+Passenger types other than ADT and INF are not supported at this time and they will price as an ADT except for applicable taxes and/or fees if passenger age or other details were entered
+   
+Certification checklist
+ID
+Web Service
+Criteria
+Expected Result
+Mandatory or optional
+Comment
+Session management
+1
+Fare_ MasterPricerTravelBoardSearch
+Master Pricer Search request
+Stateless session has been used to send the request
+Mandatory
+ 
+2
+The PNR creation flow
+All service request
+Stateful session has been used to send the request
+Mandatory
+    
+The sequence number has been increasing correctly for each request/response
+Mandatory
+    
+Service Security_Signout with TransactionStatusCode = "END" must be called to close a session
+Mandatory
+ 
+Search
+3
+Fare_ MasterPricerTravelBoardSearch
+Master Pricer Search request
+Recommendations should include PriceType with value "L" to indicate they are Light Ticketing
+Mandatory
+ 
+Informative Pricing
+4
+Fare_InformativePricingWithoutPNR
+Pricing itinerary
+The Informative Pricing function must be used to get some pricing details and the CC fees prior to end-user confirmation of the reservation.
+Optional
+Only version 14.1 or higher.
+Fare rule
+5
+Fare_TLAGetFareRules
+Pricing Itinerary
+Rules for Light Ticketing Carriers
+Optional
+Full-Service Carriers should use Fare_CheckRules 
+PNR Creation
+6
+Air_SellFromRecommendation
+Air_SellFromRecommendation response
+StatusCode = "OK" has been returned for all segment in the response
+Mandatory
+ 
+7
+Fare_PricePNRWithBookingClass
+Pricing Request
+The segment selection and passenger selection options are rejected. Other options are ignored with a warning message.
+Mandatory
+ 
+8
+Fare_PricePNRWithBookingClass
+Pricing Request with corporate ID
+Price with corporate discount is applied
+Mandatory
+Customer needs corporate fare agreement with airline
+9
+Ticket_CreateTSTFromPricing
+Ticketing
+One TST per item
+Mandatory
+One TST per alumni
+10
+Ticket_CreateTSMFromPricing
+Ticketing
+One TSM per all pax
+Optional
+One TST per all pax
+11
+PNR_AddMultiElements
+Issuance
+Should include Passenger(s) Information, Ref, AP, DOCS if Applicable
+And to save/commit the PNR
+Mandatory
+Separate issuance is not allowed.
+12
+FOP_CreateFormOfPayment
+Issuance
+FOP is added to the PNR
+Mandatory
+PNR_AddMultiElements should not be used to add any FOP.
+Ancillary service (XBAG)
+12
+Service_IntegratedCatalogue
+Pricing Services
+Catalogue of available AAAS is returned
+Optional
+PNR must exist with at least one passenger and one itinerary.
+13
+Service_StandaloneCatalogue
+Pricing Services
+Catalogue of available AAAS is returned
+Optional
+ 
+14
+Service_BookPriceProduct
+AAAs booking
+SSR in the PNR and TSM record created
+Optional
+ 
+15
+Service_BookPriceService
+AAAs booking
+SSR in the PNR and TSM record created
+Optional
+Replaces Service_BookPriceProduct
+16
+Service_IntegratedPricing
+Pricing Services
+Needed in case of chargeable Credit Cards FOP and to ensure accurate CC fees and computation
+Mandatory
+ 
+Ticketing
+17
+DocIssuance_IssueCombined
+Ticketing
+The itinerary and services are only issued together.
+Mandatory
+Separate issuance is not allowed.
+18
+DocIssuance_IssueCombined
+Ticketing
+FA elements in the PNR
+Mandatory
+         
+Error Handling
+Error
+Explanation
+TSM MISSING
+Transitional Stored Miscellaneous was created; but web service either was not call or fail.
+ITINERARY PRICING REQUIRED BEFORE PRICING
+Fare information are required to allow the pricing of the service. For the standalone catalogue, it implies that the fare basis of the priced itinerary is provided in input of the request. For the integrated catalogue, the fare information is directly retrieved by the system from the PNR context. It implies that the itinerary is priced before calling the integrated catalogue.
+TEXT INFORMATION REQUIRED
+This error message is returned by the Service_BookPriceService service. It means that some additional free text information is required for booking of the baggage, following airline's filing. This information (it could be number of kilos or pieces in excess for example) has to be provided in the input of the Service_BookPriceService. Online customers may also decide not to handle these services online.
+NEED NAMES
+The Account Holder name was not provided or not kept by the Light Ticketing Carrier. Either include the Passenger Name Information using PNR_AddMultiElements in the chdData field or using FOP_CreateFormOfPayment in the appropriate field. 
+NEED FORM OF PAYMENT
+The form of payment is invalid or was not entered in either PNR_AddMultiElements in the chdData field or using FOP_CreateFormOfPayment. Also, In the case of Eurowings, after creating the TST, we need to re-add the Credit Card, re price the PNR with Booking Class, and create again the TST.
+INVALID FORM OF PAYMENT
+The form of payment provided is invalid or information is missing. If error was detected in Test environment, please ask your Amadeus representative for the correct credit card to use for each Light Ticketing Carrier.
+INVALID FIELD LENGTH CITY NAME
+This error could be displayed during Doc Issuance. When billing information is not provided the Office ID City Name will be use and if the description is quite long this error will be displayed. Customer will either must include the ABM information or change the size of the description for the city name at the Office ID level as it quite long. Use command cryptic PV to check the city name
+  
+6 FAQ - Frequently Asked Questions
+ 
+6.1.1 Master Pricer (MP): How to differentiate the LTC recommendations from the FSC ones?
+The MP LTC recommendations are flagged with a 'L' in the below <priceType> field: 
+   
+6.1.2 Language supported by LTCs
+ 
+Airline
+Supported Language(s)
+Transavia (HV & TO)
+English 	EN (Default)
+Dutch 	NL
+German 	DE
+French	FR
+Spanish	ES
+Italian	IT
+  
+German Wings (4U)
+English 	EN (Default)
+German 	DE
+easyJet (U2)
+English 	EN (Default)
+Catalan	CA
+Czech	CS
+Danisch	DA
+Deutch 	NL
+French	FR
+German	DE
+Greek	EL
+Hungarian	HU
+Italian	IT
+Polish	PL
+Portuguese	PT
+Spanish	ES
+Turkish	TR
+AirAsia (AK, FD, D7, QZ, I5, JW, XJ, Z2)
+English 	EN (Default)
+Jet2 (LS)
+English 	EN (Default)
+Spring Airlines (9C)
+English 	EN (Default)
+ 
+6.1.3 Open Jaw Recommendations: 
+Amadeus currently cannot restrict Open Jaw Combinations for those Light Ticketing Carriers that do not allow the open jaw combinations as it will have an impact on OW (one-way) creations. 
+However, for those Light Ticketing Carriers that support Open Jaw booking such as EasyJet or Transavia, the standard Light Ticketing workflow can be used. 
+Some WS flow samples can be found in the previous chapter 5 "XML samples".
+6.1.4 Connections
+Only direct flights are supported for Light Ticketing Carriers
+ 
+6.1.5 Disabling Booking Confirmation Email
+Booking confirmation are sent directly by the carrier to the email inserted in the APE element of PNR_AddMultiElements. If Agency uses an internal email instead of the traveler's email, they will be responsible for sending all communications to the traveler, including Booking Confirmation, Booking Check In, Disruptions of Schedules, etc. Amadeus best practices is to use the Traveler's email address.
+6.1.6 Displaying TST and TSM after Booking / Ticketing
+To display TST and TSM after the booking / ticketing has been completed, you will need to use the following services in this order:
+TST
+TSM
+PNR_Retrieve
+Ticket_DisplayTST
+PNR_Retrieve
+Ticket_RetrieveListOfTSM   to get the TSM Tattoos for the next call
+Ticket_DisplayTSMP
+6.1.7 The LTC content activation will reduce the number of FSC recommendations returned in the shopping replies
+ 
+In case the LTC business is added on top of an already running Full Service Carriers (FSC) business, the activation of the LTC content will reduce the number of FSC recommendations returned by the shopping products (Master Pricer).
+This because Master Pricer is returning a fixed number of recommendations.
+This is a known consequence that should not be an issue because the LTC recommendations will replace the most expensive FSC recommendations.
+  
+7 XML Samples
+ 
+7.1.1 Shopping
+ 
+This test case does not correspond with the subsequent steps
+     
+Master Pricer
+ multi-Passenger type samples
+           
+Master Pricer
+ with Agent Fare Families samples
+   
+7.1.2 Flight Booking
+  
+7.1.3 PNR Construction
+ 
+Passenger name, Phone, Email, Billing Address, etc, etc
+   
+7.1.4 Itinerary pricing
+    
+7.1.5 Chargeable Services - Booking/Pricing/TSM creation
+(optional: only if end user wants and additional service)
+    
+7.1.6 Chargeable Services - Pricing 
+(mandatory: to be done even if the previous step has performed to ensure that that the credit card fees AAAs is handled correctly)
+    
+7.1.7 Ticket Issuance
+       
+7.1.8 Seat Selection
+    
+7.1.9 Seat Request Pricing
+        
+7.1.10 Open Jaw - Shopping
+    
+7.1.11 Open Jaw - Flight Booking
+  
+7.1.12 Open Jaw - PNR Construction
+    
+7.1.13 Open Jaw - Itinerary Pricing
+      
+7.1.14 Open Jaw - Ticket Issuance
+      
+7.1.15 Return trip for two ADT
+ 
+7.1.16 One-way trip for two ADT with XBAG
+ 
+7.1.17 Return trip for tree ADT with XBAG
+ 
+7.1.18 One-way trip for one ADT (CORPO)
+  
+7.1.19 Eurowings (EU) flow
+      
+	
+amadeus.com
+    
+Web Services, Search & Pricing Consultancy
+Last update: 28 December 2022
+Page 30 of 36	
+amadeus.com
+  
